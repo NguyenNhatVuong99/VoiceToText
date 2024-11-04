@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Text</title>
+</head>
+
+<body>
+    <h1>Real-Time Speech to Text</h1>
+    <button id="record">Start Recording</button>
+    <button id="stopRecord" disabled>Stop Recording</button>
+    <p>Transcription: <span id="transcription"></span></p>
+
+    <script>
+        let rec;
+        let audioChunks = [];
+
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                rec = new MediaRecorder(stream);
+                rec.ondataavailable = e => {
+                    audioChunks.push(e.data);
+                    if (rec.state === "inactive") {
+                        const blob = new Blob(audioChunks, { type: 'audio/webm' }); // Record as webm
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                            const audioData = event.target.result;
+                            // Send data to the server
+                            sendData(audioData);
+                        };
+                        reader.readAsArrayBuffer(blob);
+                    }
+                };
+            });
+
+        function sendData(audioData) {
+            const formData = new FormData();
+            formData.append("audio", new Blob([audioData], { type: 'audio/webm' }), "audio.webm");
+
+            fetch("{% url 'transcription_audio' %}", {
+                method: "POST",
+                body: formData,
+                headers: {
+                    "X-CSRFToken": "{{ csrf_token }}"
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("transcription").innerText = data.transcript;
+                    console.log("Transcription: ", data.transcript);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('record').onclick = () => {
+            document.getElementById('record').disabled = true;
+            document.getElementById('stopRecord').disabled = false;
+            audioChunks = [];
+            rec.start();
+        };
+
+        document.getElementById('stopRecord').onclick = () => {
+            document.getElementById('record').disabled = false;
+            document.getElementById('stopRecord').disabled = true;
+            rec.stop();
+        };
+    </script>
+</body>
+
+</html>
